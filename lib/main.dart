@@ -1,121 +1,436 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const TouchBlockApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// Touch Block App - Main Application
+///
+/// A simple app that launches a floating overlay service
+/// which can block screen touch input.
+class TouchBlockApp extends StatelessWidget {
+  const TouchBlockApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Touch Block',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6750A4),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6750A4),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.system,
+      home: const HomeScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+/// Home Screen - Main UI for controlling the touch block service
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  /// Platform channel for communicating with Android native code
+  static const _channel = MethodChannel('com.example.dont_touch_2/overlay');
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  bool _hasPermission = false;
+  bool _isServiceRunning = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkStatus();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Called when app returns to foreground (e.g., after permission settings)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkStatus();
+    }
+  }
+
+  /// Check current permission and service status
+  Future<void> _checkStatus() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final hasPermission =
+          await _channel.invokeMethod<bool>('checkOverlayPermission') ?? false;
+      final isRunning =
+          await _channel.invokeMethod<bool>('isServiceRunning') ?? false;
+
+      setState(() {
+        _hasPermission = hasPermission;
+        _isServiceRunning = isRunning;
+        _isLoading = false;
+      });
+    } on PlatformException catch (e) {
+      debugPrint('Error checking status: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// Request overlay permission from the user
+  Future<void> _requestPermission() async {
+    try {
+      final granted =
+          await _channel.invokeMethod<bool>('requestOverlayPermission') ??
+          false;
+      setState(() => _hasPermission = granted);
+    } on PlatformException catch (e) {
+      debugPrint('Error requesting permission: $e');
+      _showError('Failed to request permission');
+    }
+  }
+
+  /// Start the floating overlay service
+  Future<void> _startService() async {
+    try {
+      final success =
+          await _channel.invokeMethod<bool>('startService') ?? false;
+      if (success) {
+        setState(() => _isServiceRunning = true);
+        _showSuccess('Service started! Look for the floating icon.');
+      }
+    } on PlatformException catch (e) {
+      debugPrint('Error starting service: $e');
+      if (e.code == 'PERMISSION_DENIED') {
+        _showError('Please grant overlay permission first');
+      } else {
+        _showError('Failed to start service');
+      }
+    }
+  }
+
+  /// Stop the floating overlay service
+  Future<void> _stopService() async {
+    try {
+      await _channel.invokeMethod<bool>('stopService');
+      setState(() => _isServiceRunning = false);
+      _showSuccess('Service stopped');
+    } on PlatformException catch (e) {
+      debugPrint('Error stopping service: $e');
+      _showError('Failed to stop service');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colorScheme.primaryContainer.withOpacity(0.3),
+              colorScheme.surface,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 40),
+
+                // App Icon
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.lock_outline,
+                    size: 64,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Title
+                Text(
+                  'Touch Block',
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 8),
+
+                // Subtitle
+                Text(
+                  'Prevent accidental touches during video calls',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 48),
+
+                // Status Cards
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else ...[
+                  // Permission Status Card
+                  _StatusCard(
+                    icon: _hasPermission
+                        ? Icons.check_circle
+                        : Icons.warning_amber,
+                    iconColor: _hasPermission ? Colors.green : Colors.orange,
+                    title: 'Overlay Permission',
+                    subtitle: _hasPermission
+                        ? 'Permission granted'
+                        : 'Required to show floating icon',
+                    action: !_hasPermission
+                        ? TextButton(
+                            onPressed: _requestPermission,
+                            child: const Text('Grant Permission'),
+                          )
+                        : null,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Service Status Card
+                  _StatusCard(
+                    icon: _isServiceRunning
+                        ? Icons.play_circle
+                        : Icons.stop_circle,
+                    iconColor: _isServiceRunning
+                        ? Colors.green
+                        : colorScheme.outline,
+                    title: 'Floating Icon Service',
+                    subtitle: _isServiceRunning
+                        ? 'Active - look for the floating icon'
+                        : 'Not running',
+                  ),
+                ],
+
+                const Spacer(),
+
+                // Instructions
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'How to use:',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const _InstructionItem(
+                        number: '1',
+                        text: 'Tap the floating icon once to lock the screen',
+                      ),
+                      const _InstructionItem(
+                        number: '2',
+                        text: 'Double-tap the icon to unlock',
+                      ),
+                      const _InstructionItem(
+                        number: '3',
+                        text: 'Drag the icon to move it around',
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Main Action Button
+                if (!_isLoading)
+                  FilledButton.icon(
+                    onPressed: _hasPermission
+                        ? (_isServiceRunning ? _stopService : _startService)
+                        : _requestPermission,
+                    icon: Icon(
+                      _isServiceRunning ? Icons.stop : Icons.play_arrow,
+                    ),
+                    label: Text(
+                      _hasPermission
+                          ? (_isServiceRunning
+                                ? 'Stop Service'
+                                : 'Start Service')
+                          : 'Grant Permission First',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: _isServiceRunning
+                          ? colorScheme.error
+                          : colorScheme.primary,
+                    ),
+                  ),
+
+                const SizedBox(height: 16),
+              ],
             ),
-          ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+/// Status card widget showing permission or service status
+class _StatusCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  const _StatusCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (action != null) action!,
+        ],
+      ),
+    );
+  }
+}
+
+/// Instruction item widget
+class _InstructionItem extends StatelessWidget {
+  final String number;
+  final String text;
+
+  const _InstructionItem({required this.number, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
       ),
     );
   }
