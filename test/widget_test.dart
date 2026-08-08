@@ -8,7 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dont_touch_2/main.dart';
+import 'package:touch_block/main.dart';
 
 void main() {
   testWidgets('Touch Block app loads and shows UI', (
