@@ -1,4 +1,4 @@
-package com.example.dont_touch_2
+package xyz.arafatpeace.touchblock
 
 import android.app.Activity
 import android.content.Intent
@@ -20,7 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     
     companion object {
-        private const val CHANNEL = "com.example.dont_touch_2/overlay"
+        private const val CHANNEL = "xyz.arafatpeace.touchblock/overlay"
         private const val OVERLAY_PERMISSION_REQUEST_CODE = 1001
     }
     

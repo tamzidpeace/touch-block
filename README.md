@@ -92,7 +92,7 @@ Uses Android `WindowManager` overlays with `TYPE_APPLICATION_OVERLAY`:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd dont_touch_2
+cd touch-block
 
 # Get dependencies
 flutter pub get
