@@ -1,4 +1,4 @@
-package com.example.dont_touch_2
+package xyz.arafatpeace.touchblock
 
 import android.app.Notification
 import android.app.NotificationChannel

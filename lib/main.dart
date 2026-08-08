@@ -47,7 +47,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Platform channel for communicating with Android native code
-  static const _channel = MethodChannel('com.example.dont_touch_2/overlay');
+  static const _channel = MethodChannel('xyz.arafatpeace.touchblock/overlay');
 
   bool _hasPermission = false;
   bool _isServiceRunning = false;
