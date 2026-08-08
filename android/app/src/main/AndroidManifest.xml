@@ -10,6 +10,11 @@
     <!-- Required for vibration feedback -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
+    <!-- Required so the foreground service notification is visible on
+         Android 13+. Without it the service runs with no indicator and
+         no route back to the app. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
         android:label="Touch Block"
         android:name="${applicationName}"
@@ -48,11 +53,4 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-    
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
-        </intent>
-    </queries>
 </manifest>
