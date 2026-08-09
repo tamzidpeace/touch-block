@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="field" x1="0" y1="1024" x2="1024" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#28216F"/>
+      <stop offset="0.5" stop-color="#5C427C"/>
+      <stop offset="1" stop-color="#956E95"/>
+    </linearGradient>
+  </defs>
+
+  <rect id="bg" width="1024" height="1024" rx="224" fill="url(#field)"/>
+
+  <g id="glyph" fill="none" stroke="#FFFFFF" stroke-width="46"
+     stroke-linecap="round" stroke-linejoin="round">
+    <!-- downward touch arrow, drawn first so the slash crosses it -->
+    <path d="M446 300 V520"/>
+    <path d="M366 448 L446 528 L526 448"/>
+    <!-- prohibition ring and slash -->
+    <circle cx="446" cy="424" r="252"/>
+    <path d="M268 246 L624 602"/>
+    <!-- padlock, lower right -->
+    <rect x="642" y="712" width="216" height="164" rx="30" fill="#FFFFFF" stroke="none"/>
+    <path d="M690 712 V656 a60 60 0 0 1 120 0 V712"/>
+  </g>
+</svg>

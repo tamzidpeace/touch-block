@@ -1,10 +1,14 @@
 package xyz.arafatpeace.touchblock
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -22,6 +26,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "xyz.arafatpeace.touchblock/overlay"
         private const val OVERLAY_PERMISSION_REQUEST_CODE = 1001
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1002
     }
     
     private var pendingResult: MethodChannel.Result? = null
@@ -33,6 +38,7 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startService" -> {
                     if (checkOverlayPermission()) {
+                        ensureNotificationPermission()
                         startFloatingService()
                         result.success(true)
                     } else {
@@ -71,6 +77,32 @@ class MainActivity : FlutterActivity() {
         }
     }
     
+    /**
+     * Ask for notification permission on Android 13+ so the foreground
+     * service notification is visible.
+     *
+     * Deliberately fire-and-forget: a denial hides the notification but does
+     * not stop a foreground service from running, so the service must start
+     * either way. Blocking the app's primary function on a secondary
+     * permission would be the wrong trade.
+     */
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!granted) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                NOTIFICATION_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
     /**
      * Open system settings to request overlay permission
      * User must manually toggle the permission

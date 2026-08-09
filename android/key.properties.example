@@ -1,0 +1,16 @@
+# TEMPLATE ONLY — this file is COMMITTED TO GIT. Never put real passwords here.
+#
+# Copy it to android/key.properties (which is gitignored) and fill that in:
+#   cp android/key.properties.example android/key.properties
+#
+# Generate the keystore with:
+#   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+#   "$JAVA_HOME/bin/keytool" -genkey -v -keystore ~/touch-block-upload.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# keytool creates a PKCS12 keystore, so keyPassword must equal storePassword.
+# storeFile must be an absolute path — Gradle does not expand "~".
+storePassword=changeme
+keyPassword=changeme
+keyAlias=upload
+storeFile=/absolute/path/to/touch-block-upload.jks

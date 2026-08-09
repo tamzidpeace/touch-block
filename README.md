@@ -85,7 +85,7 @@ Uses Android `WindowManager` overlays with `TYPE_APPLICATION_OVERLAY`:
 
 - Flutter SDK (3.10.7+)
 - Android Studio / VS Code
-- Android SDK (API 21+)
+- Android SDK (API 24+)
 
 ### Build Steps
 
@@ -129,8 +129,8 @@ Users can still:
 
 ## 📋 Requirements
 
-- **Platform**: Android only (API 21+)
-- **Android 6.0+**: Manual overlay permission required
+- **Platform**: Android only (API 24+)
+- **All supported versions**: Manual overlay permission required
 - **Android 8.0+**: Foreground service with notification
 - **Android 14+**: Special use foreground service type
 

@@ -1,5 +1,5 @@
 name: touch_block
-description: "A new Flutter project."
+description: "Prevent accidental touches during video calls"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -45,6 +45,24 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+  # Code generator for the launcher icons. Runs once via
+  # `dart run flutter_launcher_icons`; its output is committed and it is
+  # never packaged into the APK.
+  flutter_launcher_icons: ^0.14.4
+
+# Derives every launcher icon from the masters in assets/icon/, which are
+# themselves rendered from assets/icon/icon.svg by tool/render_icons.py.
+# The monochrome layer intentionally reuses the foreground: Android tints
+# that layer itself, so a white-on-transparent glyph is already correct.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/icon_foreground.png"
+  min_sdk_android: 24
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
