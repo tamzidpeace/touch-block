@@ -11,6 +11,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
@@ -30,9 +31,12 @@ class MainActivity : FlutterActivity() {
     }
     
     private var pendingResult: MethodChannel.Result? = null
+    private lateinit var settingsStore: OverlaySettingsStore
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        settingsStore = OverlaySettingsStore(applicationContext)
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -58,6 +62,12 @@ class MainActivity : FlutterActivity() {
                 }
                 "isServiceRunning" -> {
                     result.success(FloatingOverlayService.isRunning)
+                }
+                "getOverlaySettings" -> {
+                    result.success(settingsStore.read().toMap())
+                }
+                "updateOverlaySettings" -> {
+                    updateOverlaySettings(call, result)
                 }
                 else -> {
                     result.notImplemented()
@@ -151,5 +161,35 @@ class MainActivity : FlutterActivity() {
     private fun stopFloatingService() {
         val intent = Intent(this, FloatingOverlayService::class.java)
         stopService(intent)
+    }
+
+    private fun updateOverlaySettings(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
+        try {
+            val arguments = call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()
+            val normalized = settingsStore.update(arguments)
+            val running = FloatingOverlayService.isRunning
+            val liveApplied = if (running) {
+                FloatingOverlayService.applySettings(normalized)
+            } else {
+                false
+            }
+
+            result.success(
+                mapOf(
+                    "settings" to normalized.toMap(),
+                    "serviceRunning" to running,
+                    "liveApplied" to liveApplied,
+                ),
+            )
+        } catch (_: SettingsPersistenceException) {
+            result.error(
+                "SETTINGS_PERSIST_FAILED",
+                "Could not persist overlay settings",
+                null,
+            )
+        }
     }
 }

@@ -17,12 +17,14 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import androidx.core.app.NotificationCompat
+import kotlin.math.roundToInt
 
 /**
  * FloatingOverlayService - Foreground service that manages the floating overlay
@@ -42,8 +44,8 @@ class FloatingOverlayService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "touch_block_channel"
         
-        // Double-tap detection threshold (milliseconds)
-        private const val DOUBLE_TAP_THRESHOLD = 300L
+        // Tap recognition window (milliseconds)
+        private const val TAP_WINDOW_MS = 300L
         
         // Drag threshold (pixels) - movement beyond this is considered a drag, not a tap
         private const val DRAG_THRESHOLD = 10
@@ -51,14 +53,23 @@ class FloatingOverlayService : Service() {
         // Track if service is running (accessible from MainActivity)
         var isRunning = false
             private set
+
+        private var instance: FloatingOverlayService? = null
+
+        internal fun applySettings(settings: OverlaySettings): Boolean {
+            return instance?.applySettingsOnMain(settings) ?: false
+        }
     }
     
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: ImageView
     private var blockingView: View? = null
-    
+
     private var isBlocking = false
-    private var lastTapTime = 0L
+    private lateinit var settings: OverlaySettings
+    private lateinit var gestureRecognizer: TapGestureRecognizer
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingLockRunnable: Runnable? = null
     
     // For drag gesture handling
     private var initialX = 0
@@ -72,6 +83,9 @@ class FloatingOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        instance = this
+        settings = OverlaySettingsStore(applicationContext).read()
+        gestureRecognizer = TapGestureRecognizer(settings.unlockTapCount, TAP_WINDOW_MS)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
@@ -85,6 +99,11 @@ class FloatingOverlayService : Service() {
     }
     
     override fun onDestroy() {
+        cancelPendingLock()
+        if (::gestureRecognizer.isInitialized) {
+            gestureRecognizer.reset()
+        }
+        instance = null
         super.onDestroy()
         isRunning = false
         removeFloatingIcon()
@@ -122,7 +141,13 @@ class FloatingOverlayService : Service() {
         
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Touch Block Active")
-            .setContentText(if (isBlocking) "Screen is locked - Double tap icon to unlock" else "Tap floating icon to lock screen")
+            .setContentText(
+                if (isBlocking) {
+                    "Screen is locked - ${OverlayNotificationText.unlockInstruction(settings.unlockTapCount)}"
+                } else {
+                    "Tap floating icon to lock screen"
+                },
+            )
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -142,6 +167,9 @@ class FloatingOverlayService : Service() {
      * Create the floating icon overlay
      */
     private fun createFloatingIcon() {
+        val sizePx = dpToPixels(settings.iconSize.sizeDp)
+        val paddingPx = dpToPixels(settings.iconSize.paddingDp)
+
         floatingView = ImageView(this).apply {
             setImageResource(android.R.drawable.ic_lock_lock)
             
@@ -154,8 +182,8 @@ class FloatingOverlayService : Service() {
             
             // Make it visually appealing
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setPadding(32, 32, 32, 32)
-            alpha = 0.95f
+            setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+            alpha = settings.opacityPercent / 100f
             elevation = 8f
         }
         
@@ -168,8 +196,8 @@ class FloatingOverlayService : Service() {
         }
         
         floatingParams = WindowManager.LayoutParams(
-            150, // width
-            150, // height
+            sizePx, // width
+            sizePx, // height
             layoutFlag,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -197,6 +225,10 @@ class FloatingOverlayService : Service() {
                     // Check if movement exceeds drag threshold
                     if (kotlin.math.abs(deltaX) > DRAG_THRESHOLD || 
                         kotlin.math.abs(deltaY) > DRAG_THRESHOLD) {
+                        if (!hasMoved) {
+                            gestureRecognizer.reset()
+                            cancelPendingLock()
+                        }
                         hasMoved = true
                     }
                     
@@ -212,6 +244,11 @@ class FloatingOverlayService : Service() {
                     }
                     true
                 }
+                MotionEvent.ACTION_CANCEL -> {
+                    gestureRecognizer.reset()
+                    cancelPendingLock()
+                    true
+                }
                 else -> false
             }
         }
@@ -220,39 +257,47 @@ class FloatingOverlayService : Service() {
         updateFloatingIconState()
     }
     
-    /**
-     * Handle tap on the floating icon
-     * Detects single tap vs double tap
-     */
+    /** Handle tap decisions from the configured gesture recognizer. */
     private fun handleTap() {
-        val currentTime = System.currentTimeMillis()
-        
-        if (currentTime - lastTapTime < DOUBLE_TAP_THRESHOLD) {
-            // Double tap detected - unlock
-            if (isBlocking) {
-                toggleBlocking()
-            }
-            lastTapTime = 0L
-        } else {
-            // Possible single tap - wait to see if it's a double tap
-            lastTapTime = currentTime
-            
-            Handler(Looper.getMainLooper()).postDelayed({
-                if (lastTapTime == currentTime) {
-                    // Single tap confirmed - lock
-                    if (!isBlocking) {
-                        toggleBlocking()
-                    }
-                }
-            }, DOUBLE_TAP_THRESHOLD)
+        when (
+            gestureRecognizer.onTap(
+                timestampMs = System.currentTimeMillis(),
+                isBlocking = isBlocking,
+            )
+        ) {
+            TapDecision.SCHEDULE_LOCK -> scheduleLockConfirmation()
+            TapDecision.CANCEL_PENDING_LOCK -> cancelPendingLock()
+            TapDecision.LOCK -> setBlocking(true)
+            TapDecision.UNLOCK -> setBlocking(false)
+            TapDecision.NONE -> Unit
         }
     }
-    
-    /**
-     * Toggle the touch blocking state
-     */
-    private fun toggleBlocking() {
-        isBlocking = !isBlocking
+
+    private fun scheduleLockConfirmation() {
+        cancelPendingLock()
+        val runnable = Runnable {
+            pendingLockRunnable = null
+            if (
+                gestureRecognizer.onLockTimeout(System.currentTimeMillis()) ==
+                TapDecision.LOCK &&
+                !isBlocking
+            ) {
+                setBlocking(true)
+            }
+        }
+        pendingLockRunnable = runnable
+        mainHandler.postDelayed(runnable, TAP_WINDOW_MS)
+    }
+
+    private fun cancelPendingLock() {
+        pendingLockRunnable?.let(mainHandler::removeCallbacks)
+        pendingLockRunnable = null
+    }
+
+    private fun setBlocking(shouldBlock: Boolean) {
+        if (isBlocking == shouldBlock) return
+
+        isBlocking = shouldBlock
         vibrateShort()
         
         if (isBlocking) {
@@ -263,6 +308,42 @@ class FloatingOverlayService : Service() {
         
         updateFloatingIconState()
         updateNotification()
+    }
+
+    private fun applySettingsOnMain(next: OverlaySettings): Boolean {
+        if (
+            !::floatingView.isInitialized ||
+            !::floatingParams.isInitialized ||
+            !::gestureRecognizer.isInitialized
+        ) {
+            return false
+        }
+
+        return try {
+            val normalized = next.normalized()
+            floatingParams.width = dpToPixels(normalized.iconSize.sizeDp)
+            floatingParams.height = dpToPixels(normalized.iconSize.sizeDp)
+            val paddingPx = dpToPixels(normalized.iconSize.paddingDp)
+            floatingView.setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+            floatingView.alpha = normalized.opacityPercent / 100f
+            windowManager.updateViewLayout(floatingView, floatingParams)
+
+            settings = normalized
+            gestureRecognizer.updateUnlockTapCount(normalized.unlockTapCount)
+            cancelPendingLock()
+            updateNotification()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun dpToPixels(valueDp: Int): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            valueDp.toFloat(),
+            resources.displayMetrics,
+        ).roundToInt()
     }
     
     /**
