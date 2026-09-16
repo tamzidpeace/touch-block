@@ -48,3 +48,9 @@ app.*.map.json
 key.properties
 *.jks
 *.keystore
+
+/docs
+
+touch-block.code-workspace
+/store
+/screenshots
