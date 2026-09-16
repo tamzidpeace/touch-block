@@ -48,15 +48,15 @@ Designed for parents during video calls - prevents toddlers from accidentally:
 
 ## 📸 Screenshots
 
-| App UI | Unlocked State | Locked State |
-|--------|----------------|--------------|
-| ![App UI](screenshots/app_ui.jpg) | ![Unlocked](screenshots/floating_icon_white.jpg) | ![Locked](screenshots/floating_icon_red.jpg) |
+| App UI | Settings | Unlocked State | Locked State |
+|--------|----------|----------------|--------------|
+| <img src="screenshots/app_ui.jpg" alt="App UI" height="420"> | <img src="screenshots/settings.png" alt="Settings" height="420"> | <img src="screenshots/floating_icon_white.jpg" alt="Unlocked" height="420"> | <img src="screenshots/floating_icon_red.jpg" alt="Locked" height="420"> |
 
 ---
 
 ## 🚀 How to Use
 
-1. **Install the app** from the [download link](https://drive.google.com/file/d/1CVZ1d3nissj414E0XWM_lA7EbDxHqe_T/view?usp=sharing)
+1. **Install the app** from the [download link](https://drive.google.com/file/d/1GLu5b8R6REPvnibz5iuNcb-Zzi8R7PqI/view?usp=sharing)
 2. **Grant overlay permission** when prompted (required for floating icon)
 3. **Tap "Start Service"** to show the floating icon
 4. **Single-tap** the floating icon → locks the screen (blocks all touches)
